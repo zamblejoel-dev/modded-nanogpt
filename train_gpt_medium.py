@@ -6,6 +6,7 @@ with open(sys.argv[0]) as f:
 import copy
 import glob
 import math
+import queue
 import threading
 import time
 import uuid
@@ -1659,17 +1660,37 @@ master_process = (rank == 0) # this process will do logging, checkpointing etc.
 
 # begin logging
 logfile = None
+log_queue = queue.Queue()
+def logger_thread(logfile):
+    with open(logfile, "a", buffering=1) as f:
+        while True:
+            item = log_queue.get()
+            if item is None:
+                log_queue.task_done()
+                break
+            s, console = item
+            if console:
+                print(s)
+            f.write(s + "\n")
+            log_queue.task_done()
+
 if master_process:
     run_id = args.run_id
     os.makedirs("logs", exist_ok=True)
     logfile = f"logs/{run_id}.txt"
     print(logfile)
+    threading.Thread(target=logger_thread, args=(logfile,), daemon=True).start()
+
 def print0(s, console=False):
     if master_process:
-        with open(logfile, "a") as f:
-            if console:
-                print(s)
-            print(s, file=f)
+        log_queue.put((str(s), console))
+
+import atexit
+def cleanup_logger():
+    if master_process:
+        log_queue.put(None)
+        log_queue.join()
+atexit.register(cleanup_logger)
 
 # begin by printing this file (the Python code)
 print0(code)
