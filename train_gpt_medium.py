@@ -6,7 +6,9 @@ with open(sys.argv[0]) as f:
 import copy
 import glob
 import math
+import queue
 import threading
+import atexit
 import time
 import uuid
 from dataclasses import dataclass
@@ -1659,17 +1661,38 @@ master_process = (rank == 0) # this process will do logging, checkpointing etc.
 
 # begin logging
 logfile = None
+log_queue = None
 if master_process:
     run_id = args.run_id
     os.makedirs("logs", exist_ok=True)
     logfile = f"logs/{run_id}.txt"
     print(logfile)
+
+    log_queue = queue.Queue()
+    def _log_worker():
+        while True:
+            item = log_queue.get()
+            if item is None:
+                break
+            s, console = item
+            with open(logfile, "a") as f:
+                if console:
+                    print(s)
+                print(s, file=f)
+            log_queue.task_done()
+
+    log_thread = threading.Thread(target=_log_worker, daemon=True)
+    log_thread.start()
+
+    def _flush_logs():
+        log_queue.put(None)
+        log_thread.join()
+
+    atexit.register(_flush_logs)
+
 def print0(s, console=False):
     if master_process:
-        with open(logfile, "a") as f:
-            if console:
-                print(s)
-            print(s, file=f)
+        log_queue.put((s, console))
 
 # begin by printing this file (the Python code)
 print0(code)
