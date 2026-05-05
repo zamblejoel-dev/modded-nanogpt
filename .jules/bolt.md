@@ -1,0 +1,3 @@
+## 2024-03-08 - CPU Bottleneck in Data Loader via Eager execution
+**Learning:** PyTorch eager tensor operations in the data loader iteration (e.g. computing bigram hashing for each batch position) can create a substantial CPU overhead when executed thousands of times. `torch.compile` is highly effective but must be wrapped correctly because compiling code with `pin_memory=True` directly doesn't usually map well to fullgraph compilation.
+**Action:** Use `torch.compile` for mathematical preprocessing operations in data loaders but extract host-specific memory layout modifiers like `pin_memory()` to the eager wrapping function.

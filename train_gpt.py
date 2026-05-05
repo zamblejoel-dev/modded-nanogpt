@@ -1454,6 +1454,14 @@ class Shard:
             return result['shard']
         return get
 
+@torch.compile(fullgraph=True)
+def _get_bigram_hash_compiled(x, mod: int, rand_int_1: int, rand_int_2: int):
+    out = torch.empty_like(x)
+    out.copy_(x)
+    out[0] = mod
+    out[1:] = torch.bitwise_xor(rand_int_1 * out[1:], rand_int_2 * out[:-1]) % mod
+    return out
+
 def get_bigram_hash(x):
     """
     Computes bigram hash for each position using [prev_token, curr_token].
@@ -1465,11 +1473,8 @@ def get_bigram_hash(x):
     rand_int_2 = 27191
     mod = args.bigram_vocab_size-1
     x = x.to(torch.int32)
-    out = torch.empty_like(x, pin_memory=True)
-    out.copy_(x)
-    out[0] = mod
-    out[1:] = torch.bitwise_xor(rand_int_1 * out[1:], rand_int_2 * out[:-1]) % mod
-    return out
+    out = _get_bigram_hash_compiled(x, mod, rand_int_1, rand_int_2)
+    return out.pin_memory()
 
 def distributed_data_generator(filename_pattern: str, num_tokens: int, max_seq_len: int, grad_accum_steps: int = 1, align_to_bos: bool = True):
     # align_to_bos: each sequence begins with Beginning of Sequence token, sequences truncated to max_seq_len
