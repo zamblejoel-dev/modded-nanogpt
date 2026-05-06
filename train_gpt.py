@@ -2,11 +2,15 @@ import os
 import sys
 
 # Read the current file and the kernels file code ASAP, for logging
-with open(sys.argv[0], 'r') as f:
-    code = f.read()
-with open(os.path.join(os.path.dirname(sys.argv[0]), 'triton_kernels.py'), 'r') as f:
-    code += f"\n\n{'-'*40}\n# triton_kernels.py\n{'-'*40}\n\n"
-    code += f.read()
+if __name__ == '__main__':
+    with open(sys.argv[0], 'r') as f:
+        code = f.read()
+    with open(os.path.join(os.path.dirname(sys.argv[0]), 'triton_kernels.py'), 'r') as f:
+        code += f"\n\n{'-'*40}\n# triton_kernels.py\n{'-'*40}\n\n"
+        code += f.read()
+else:
+    code = ""
+
 
 import copy
 import glob
@@ -24,9 +28,10 @@ import torch
 import triton
 import numpy as np
 
-torch.empty(
-    1, device=f"cuda:{os.environ['LOCAL_RANK']}", requires_grad=True
-).backward()  # prevents a bug on some systems
+if __name__ == '__main__':
+    torch.empty(
+        1, device=f"cuda:{os.environ['LOCAL_RANK']}", requires_grad=True
+    ).backward()  # prevents a bug on some systems
 import torch._dynamo as dynamo
 import torch.distributed as dist
 import torch.nn.functional as F
@@ -44,17 +49,24 @@ dynamo.config.recompile_limit = 64
 
 # -----------------------------------------------------------------------------
 # Distributed training setup
-rank = int(os.environ["RANK"])
-world_size = int(os.environ["WORLD_SIZE"])
-assert 8 % world_size == 0, "world_size must be a divisor of 8"
-grad_accum_steps = 8 // world_size
-grad_scale = 1 / grad_accum_steps # consistent grad magnitudes between different num_devices
-assert torch.cuda.is_available()
-device = torch.device("cuda", int(os.environ["LOCAL_RANK"]))
-torch.cuda.set_device(device)
-dist.init_process_group(backend="cuda:nccl,cpu:gloo", device_id=device)
-dist.barrier()
-master_process = (rank == 0) # this process will do logging, checkpointing etc.
+if __name__ == '__main__':
+    rank = int(os.environ["RANK"])
+    world_size = int(os.environ["WORLD_SIZE"])
+    assert 8 % world_size == 0, "world_size must be a divisor of 8"
+    grad_accum_steps = 8 // world_size
+    grad_scale = 1 / grad_accum_steps # consistent grad magnitudes between different num_devices
+    assert torch.cuda.is_available()
+    device = torch.device("cuda", int(os.environ["LOCAL_RANK"]))
+    torch.cuda.set_device(device)
+    dist.init_process_group(backend="cuda:nccl,cpu:gloo", device_id=device)
+    dist.barrier()
+    master_process = (rank == 0) # this process will do logging, checkpointing etc.
+else:
+    rank = 0
+    world_size = 1
+    grad_accum_steps = 1
+    grad_scale = 1.0
+    master_process = True
 
 # -----------------------------------------------------------------------------
 # Custom operators: FP8 matmul by @YouJiacheng
@@ -1854,9 +1866,7 @@ class TrainingManager():
 
         
 
-# -----------------------------------------------------------------------------
-# int main
-
+# -----------------------------------------------------------------------------\n# int main\n\nif __name__ == '__main__':\n
 # begin logging
 logfile = None
 if master_process:
