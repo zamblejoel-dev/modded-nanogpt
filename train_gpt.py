@@ -8,9 +8,11 @@ with open(os.path.join(os.path.dirname(sys.argv[0]), 'triton_kernels.py'), 'r') 
     code += f"\n\n{'-'*40}\n# triton_kernels.py\n{'-'*40}\n\n"
     code += f.read()
 
+import atexit
 import copy
 import glob
 import math
+import queue
 import threading
 import time
 import uuid
@@ -1870,12 +1872,35 @@ if __name__ == '__main__':
         os.makedirs("logs", exist_ok=True)
         logfile = f"logs/{run_id}.txt"
         print(logfile)
+
+        log_queue = queue.Queue()
+
+        def log_worker():
+            with open(logfile, "a") as f:
+                while True:
+                    item = log_queue.get()
+                    if item is None:
+                        break
+                    s, console = item
+                    if console:
+                        print(s)
+                    print(s, file=f)
+                    f.flush()
+                    log_queue.task_done()
+
+        log_thread = threading.Thread(target=log_worker)
+        log_thread.daemon = True
+        log_thread.start()
+
+        def cleanup_logs():
+            log_queue.put(None)
+            log_thread.join()
+
+        atexit.register(cleanup_logs)
+
     def print0(s, console=False):
         if master_process:
-            with open(logfile, "a") as f:
-                if console:
-                    print(s)
-                print(s, file=f)
+            log_queue.put((s, console))
 
     # begin by printing this file (the Python code)
     print0(code)
