@@ -73,3 +73,31 @@ def test_next_multiple_of_n():
     assert train_gpt.next_multiple_of_n(11, n=3) == 12
     assert train_gpt.next_multiple_of_n(11, n=128) == 128
     assert train_gpt.next_multiple_of_n(129, n=128) == 256
+
+def test_norm():
+    import math
+    import torch
+
+    # Basic shape test
+    x = torch.randn(2, 3, 4)
+    y = train_gpt.norm(x)
+    assert y.shape == x.shape, f"Expected shape {x.shape}, got {y.shape}"
+
+    # Values test
+    x_val = torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=torch.float32)
+    y_val = train_gpt.norm(x_val)
+
+    rms0 = math.sqrt((1.0**2 + 2.0**2 + 3.0**2) / 3.0)
+    rms1 = math.sqrt((4.0**2 + 5.0**2 + 6.0**2) / 3.0)
+
+    expected_y0 = torch.tensor([1.0 / rms0, 2.0 / rms0, 3.0 / rms0])
+    expected_y1 = torch.tensor([4.0 / rms1, 5.0 / rms1, 6.0 / rms1])
+
+    assert torch.allclose(y_val[0], expected_y0, atol=1e-5)
+    assert torch.allclose(y_val[1], expected_y1, atol=1e-5)
+
+    # Edge case: zeros
+    x_zero = torch.zeros((2, 3))
+    y_zero = train_gpt.norm(x_zero)
+    # RMS of zeros is 0, F.rms_norm might add eps, but without weight it should be 0s
+    assert torch.allclose(y_zero, torch.zeros_like(y_zero))
