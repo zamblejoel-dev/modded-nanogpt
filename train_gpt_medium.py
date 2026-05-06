@@ -1,8 +1,7 @@
 import os
 import sys
 
-with open(sys.argv[0]) as f:
-    code = f.read()  # read the code of this file ASAP, for logging
+
 import copy
 import glob
 import math
@@ -18,9 +17,7 @@ import gc
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
 import torch
 
-torch.empty(
-    1, device=f"cuda:{os.environ['LOCAL_RANK']}", requires_grad=True
-    ).backward()  # prevents a bug on some systems
+
 import torch._dynamo as dynamo
 import torch.distributed as dist
 import torch.nn.functional as F
@@ -1026,7 +1023,7 @@ class Block(nn.Module):
 # The main model
 
 def next_multiple_of_n(v: float | int, *, n: int):
-    return next(x for x in range(n, int(v) + 1 + n, n) if x >= v)
+    return math.ceil(v / n) * n
 
 @dataclass
 class ForwardScheduleConfig:
@@ -1646,19 +1643,22 @@ args.train_files = os.path.join(data_path, args.train_files)
 args.val_files = os.path.join(data_path, args.val_files)
 
 # torchrun sets these env variables
-rank = int(os.environ["RANK"])
-world_size = int(os.environ["WORLD_SIZE"])
+rank = int(os.environ.get("RANK", 0))
+world_size = int(os.environ.get("WORLD_SIZE", 8))
 assert 8 % world_size == 0, "world_size must be a divisor of 8"
 grad_accum_steps = 8 // world_size
-assert torch.cuda.is_available()
-device = torch.device("cuda", int(os.environ["LOCAL_RANK"]))
-torch.cuda.set_device(device)
-dist.init_process_group(backend="nccl", device_id=device)
-dist.barrier()
+device = torch.device("cuda", int(os.environ.get("LOCAL_RANK", 0))) if torch.cuda.is_available() else torch.device("cpu")
 master_process = (rank == 0) # this process will do logging, checkpointing etc.
 
 # begin logging
 if __name__ == '__main__':
+    assert torch.cuda.is_available()
+    torch.cuda.set_device(device)
+    dist.init_process_group(backend="nccl", device_id=device)
+    dist.barrier()
+    torch.empty(1, device=device, requires_grad=True).backward()
+    with open(sys.argv[0]) as f:
+        code = f.read()
     logfile = None
     if master_process:
         run_id = args.run_id
