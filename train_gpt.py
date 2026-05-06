@@ -1,12 +1,7 @@
 import os
 import sys
 
-# Read the current file and the kernels file code ASAP, for logging
-with open(sys.argv[0], 'r') as f:
-    code = f.read()
-with open(os.path.join(os.path.dirname(sys.argv[0]), 'triton_kernels.py'), 'r') as f:
-    code += f"\n\n{'-'*40}\n# triton_kernels.py\n{'-'*40}\n\n"
-    code += f.read()
+
 
 import copy
 import glob
@@ -24,9 +19,7 @@ import torch
 import triton
 import numpy as np
 
-torch.empty(
-    1, device=f"cuda:{os.environ['LOCAL_RANK']}", requires_grad=True
-    ).backward()  # prevents a bug on some systems
+
 import torch._dynamo as dynamo
 import torch.distributed as dist
 import torch.nn.functional as F
@@ -44,16 +37,12 @@ dynamo.config.recompile_limit = 64
 
 # -----------------------------------------------------------------------------
 # Distributed training setup
-rank = int(os.environ["RANK"])
-world_size = int(os.environ["WORLD_SIZE"])
+rank = int(os.environ.get("RANK", 0))
+world_size = int(os.environ.get("WORLD_SIZE", 8))
 assert 8 % world_size == 0, "world_size must be a divisor of 8"
 grad_accum_steps = 8 // world_size
 grad_scale = 1 / grad_accum_steps # consistent grad magnitudes between different num_devices
-assert torch.cuda.is_available()
-device = torch.device("cuda", int(os.environ["LOCAL_RANK"]))
-torch.cuda.set_device(device)
-dist.init_process_group(backend="cuda:nccl,cpu:gloo", device_id=device)
-dist.barrier()
+device = torch.device("cpu") if not torch.cuda.is_available() else torch.device("cuda", int(os.environ.get("LOCAL_RANK", 0)))
 master_process = (rank == 0) # this process will do logging, checkpointing etc.
 
 # -----------------------------------------------------------------------------
@@ -1864,6 +1853,16 @@ class TrainingManager():
 
 # begin logging
 if __name__ == '__main__':
+    assert torch.cuda.is_available()
+    torch.cuda.set_device(device)
+    dist.init_process_group(backend="cuda:nccl,cpu:gloo", device_id=device)
+    dist.barrier()
+    torch.empty(1, device=device, requires_grad=True).backward()
+    with open(sys.argv[0], 'r') as f:
+        code = f.read()
+    with open(os.path.join(os.path.dirname(sys.argv[0]), 'triton_kernels.py'), 'r') as f:
+        code += f"\n\n{'-'*40}\n# triton_kernels.py\n{'-'*40}\n\n"
+        code += f.read()
     logfile = None
     if master_process:
         run_id = args.run_id
