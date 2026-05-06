@@ -28,9 +28,18 @@ def test_norm_train_gpt():
     norm = get_norm_func("train_gpt.py")
     assert norm is not None
 
-    x = torch.randn(2, 3, 4)
-    y = norm(x)
-    assert y.shape == x.shape, f"Expected shape {x.shape}, got {y.shape}"
+    # Shape tests
+    for shape in [(10,), (2, 5), (3, 4, 5), (2, 3, 4, 5)]:
+        x = torch.randn(shape)
+        y = norm(x)
+        assert y.shape == x.shape, f"Expected shape {x.shape}, got {y.shape}"
+
+    # Dtype tests
+    for dtype in [torch.float32, torch.bfloat16, torch.float16]:
+        x = torch.randn((2, 3, 4), dtype=dtype)
+        y = norm(x)
+        assert y.dtype == dtype, f"Expected dtype {dtype}, got {y.dtype}"
+        assert y.shape == x.shape, f"Expected shape {x.shape}, got {y.shape}"
 
     x_val = torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=torch.float32)
     y_val = norm(x_val)
@@ -47,15 +56,41 @@ def test_norm_train_gpt():
     x_zero = torch.zeros((2, 3))
     y_zero = norm(x_zero)
     assert torch.allclose(y_zero, torch.zeros_like(y_zero))
+
+    # Independent dimension tests
+    # Modifying the first row should not affect the second row
+    x_indep = torch.randn(2, 3, dtype=torch.float32)
+    y_indep = norm(x_indep)
+    x_indep_modified = x_indep.clone()
+    x_indep_modified[0] = x_indep_modified[0] * 2.0
+    y_indep_modified = norm(x_indep_modified)
+    assert torch.allclose(y_indep[1], y_indep_modified[1], atol=1e-5), "Norm is not independent across rows"
+
+    # Manual implementation test
+    x_manual = torch.randn(10, 20, 30, dtype=torch.float32)
+    y_manual = norm(x_manual)
+    # F.rms_norm default eps is 1e-5
+    y_expected = x_manual * torch.rsqrt(x_manual.pow(2).mean(-1, keepdim=True) + 1e-5)
+    assert torch.allclose(y_manual, y_expected, atol=1e-4)
+
 
 def test_norm_train_gpt_medium():
     norm = get_norm_func("train_gpt_medium.py")
     if norm is None:
         pytest.skip("norm function not found in train_gpt_medium.py")
 
-    x = torch.randn(2, 3, 4)
-    y = norm(x)
-    assert y.shape == x.shape, f"Expected shape {x.shape}, got {y.shape}"
+    # Shape tests
+    for shape in [(10,), (2, 5), (3, 4, 5), (2, 3, 4, 5)]:
+        x = torch.randn(shape)
+        y = norm(x)
+        assert y.shape == x.shape, f"Expected shape {x.shape}, got {y.shape}"
+
+    # Dtype tests
+    for dtype in [torch.float32, torch.bfloat16, torch.float16]:
+        x = torch.randn((2, 3, 4), dtype=dtype)
+        y = norm(x)
+        assert y.dtype == dtype, f"Expected dtype {dtype}, got {y.dtype}"
+        assert y.shape == x.shape, f"Expected shape {x.shape}, got {y.shape}"
 
     x_val = torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], dtype=torch.float32)
     y_val = norm(x_val)
@@ -72,3 +107,19 @@ def test_norm_train_gpt_medium():
     x_zero = torch.zeros((2, 3))
     y_zero = norm(x_zero)
     assert torch.allclose(y_zero, torch.zeros_like(y_zero))
+
+    # Independent dimension tests
+    # Modifying the first row should not affect the second row
+    x_indep = torch.randn(2, 3, dtype=torch.float32)
+    y_indep = norm(x_indep)
+    x_indep_modified = x_indep.clone()
+    x_indep_modified[0] = x_indep_modified[0] * 2.0
+    y_indep_modified = norm(x_indep_modified)
+    assert torch.allclose(y_indep[1], y_indep_modified[1], atol=1e-5), "Norm is not independent across rows"
+
+    # Manual implementation test
+    x_manual = torch.randn(10, 20, 30, dtype=torch.float32)
+    y_manual = norm(x_manual)
+    # F.rms_norm default eps is 1e-5
+    y_expected = x_manual * torch.rsqrt(x_manual.pow(2).mean(-1, keepdim=True) + 1e-5)
+    assert torch.allclose(y_manual, y_expected, atol=1e-4)
